@@ -1,25 +1,50 @@
 <?php
-session_start();
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $name  = trim($_POST['name']  ?? '');
-    $car   = trim($_POST['car']   ?? '');
-    $plate = trim($_POST['plate'] ?? '');
-    $time  = trim($_POST['time']  ?? '');
+$name  = $_POST['name'];
+$car   = $_POST['car'];
+$plate = $_POST['plate'];
+$time  = $_POST['time'];
 
-    if (!empty($name) && !empty($car) && !empty($plate) && !empty($time)) {
+$command = escapeshellcmd(
+    "python app.py \"$name\" \"$car\" \"$plate\" \"$time\""
+);
 
-        $conn = new mysqli('127.0.0.1:4306', 'root', '', 'plts');
-        if ($conn->connect_error) {
-            die(json_encode(["error" => "DB Connection Failed: " . $conn->connect_error]));
-        }
+$output = shell_exec($command);
 
-        $stmt = $conn->prepare("INSERT INTO parking (name, car, plate, time) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $name, $car, $plate, $time);
-        $stmt->execute();
-        $stmt->close();
-        $conn->close();
+$data = json_decode($output, true);
 
-    }
-}
+$conn = new mysqli(
+    '127.0.0.1:4306',
+    'root',
+    '',
+    'plts'
+);
+
+$stmt = $conn->prepare(
+    "INSERT INTO parking
+    (name, car, plate, time,
+     entry_time, fee, slot_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?)"
+);
+
+$stmt->bind_param(
+    "sssssdi",
+
+    $data['customer_name'],
+    $data['car_model'],
+    $data['plate'],
+    $data['hours'],
+    $data['entry_time'],
+    $data['fee'],
+    $data['slot_number']
+);
+
+$stmt->execute();
+
+$id = $conn->insert_id;
+
+header("Location: ticket.php?id=$id");
+
+exit();
+
 ?>
